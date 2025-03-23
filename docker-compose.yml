@@ -1,0 +1,83 @@
+version: "3.8"
+
+services:
+  # RabbitMQ service
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672" # AMQP port
+      - "15672:15672" # Management UI port
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
+    healthcheck:
+      test: ["CMD", "rabbitmqctl", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # FastAPI server
+  server:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./server:/app
+      - ./server/storage:/app/storage
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - RABBITMQ_HOST=rabbitmq
+
+  # Video Enhancement Worker
+  video_enhancement:
+    build:
+      context: .
+      dockerfile: workers/video_enhancement/Dockerfile
+    volumes:
+      - ./workers/video_enhancement:/app
+      - ./server/storage:/app/storage
+    depends_on:
+      - server
+      - rabbitmq
+    environment:
+      - RABBITMQ_HOST=rabbitmq
+      - SERVER_URL=http://server:8000
+
+  # Metadata Extraction Worker
+  metadata_extraction:
+    build:
+      context: .
+      dockerfile: workers/metadata_extraction/Dockerfile
+    volumes:
+      - ./workers/metadata_extraction:/app
+      - ./server/storage:/app/storage
+    depends_on:
+      - server
+      - rabbitmq
+    environment:
+      - RABBITMQ_HOST=rabbitmq
+      - SERVER_URL=http://server:8000
+
+  # React Client
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./client:/app
+      - /app/node_modules
+    depends_on:
+      - server
+    environment:
+      - REACT_APP_API_URL=http://localhost:8000
+
+volumes:
+  rabbitmq_data:

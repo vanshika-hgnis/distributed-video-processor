@@ -1,0 +1,17 @@
+FROM python:3.9-slim
+
+WORKDIR /app
+
+COPY server/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY server/ .
+
+# Create storage directory
+RUN mkdir -p storage
+
+# Expose port for the FastAPI server
+EXPOSE 8000
+
+# Start the server
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
