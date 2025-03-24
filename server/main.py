@@ -35,8 +35,9 @@ file_status: Dict[str, Dict] = {}
 
 # Configure RabbitMQ connection
 def get_rabbitmq_connection():
-    return pika.BlockingConnection(pika.ConnectionParameters(host='localhost'))
-
+    return pika.BlockingConnection(
+        pika.ConnectionParameters(host='rabbitmq')
+    )
 # WebSocket endpoint
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):

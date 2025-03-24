@@ -7,17 +7,30 @@ import requests
 from pathlib import Path
 
 # Configure RabbitMQ connection
+import os
+import pika
+
 def get_rabbitmq_connection():
     connection_attempts = 0
-    max_attempts = 5
+    max_attempts = 10  # Increased retries
     while connection_attempts < max_attempts:
         try:
-            return pika.BlockingConnection(pika.ConnectionParameters(host='localhost'))
-        except pika.exceptions.AMQPConnectionError:
+            return pika.BlockingConnection(
+                pika.ConnectionParameters(
+                    host=os.getenv('RABBITMQ_HOST', 'rabbitmq'),  # Use Docker service name
+                    port=5672,  # Default AMQP port
+                    credentials=pika.PlainCredentials(
+                        username=os.getenv('RABBITMQ_USER', 'guest'),
+                        password=os.getenv('RABBITMQ_PASS', 'guest')
+                    ),
+                    heartbeat=600,
+                    blocked_connection_timeout=300
+                )
+            )
+        except pika.exceptions.AMQPConnectionError as e:
             connection_attempts += 1
-            print(f"Failed to connect to RabbitMQ, attempt {connection_attempts}/{max_attempts}")
-            time.sleep(5)
-    
+            print(f"Failed to connect to RabbitMQ, attempt {connection_attempts}/{max_attempts}: {e}")
+            time.sleep(10)  # Increased delay between retries
     raise Exception("Failed to connect to RabbitMQ after multiple attempts")
 
 def enhance_video(input_path, output_path):

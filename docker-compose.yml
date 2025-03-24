@@ -1,85 +1,90 @@
-version: "3.8"
-
 services:
-  # RabbitMQ service
   rabbitmq:
     image: rabbitmq:3-management
     ports:
-      # - "5672:5672" # AMQP port
-      - 5673:5672
-      # - "15672:15672" # Management UI port
-      - 15673:15673
-    volumes:
-      - rabbitmq_data:/var/lib/rabbitmq
+      - "5672:5672" # AMQP (container:5672 -> host:5672)
+      - "15673:15673" # Management UI
+    networks:
+      - app-network
     environment:
       - RABBITMQ_DEFAULT_USER=guest
       - RABBITMQ_DEFAULT_PASS=guest
     healthcheck:
-      test: ["CMD", "rabbitmqctl", "status"]
+      test: ["CMD", "rabbitmqctl", "await_startup"]
       interval: 10s
-      timeout: 5s
-      retries: 5
+      timeout: 10s
+      retries: 10
 
-  # FastAPI server
   server:
     build:
-      context: .
-      dockerfile: server/Dockerfile
+      context: ./server
+      dockerfile: Dockerfile
     ports:
       - "8000:8000"
+    networks:
+      - app-network
     volumes:
-      - ./server:/app
-      - ./server/storage:/app/storage
+      - storage:/app/storage
     depends_on:
       rabbitmq:
         condition: service_healthy
     environment:
       - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_URL=amqp://rabbitmq:5672
+      - WEBSOCKET_ENABLED=true
+      - REACT_APP_WS_URL=ws://server:8000
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --ws websockets
 
-  # Video Enhancement Worker
   video_enhancement:
     build:
-      context: .
-      dockerfile: workers/video_enhancement/Dockerfile
+      context: ./workers/video_enhancement
+      dockerfile: Dockerfile
+    networks:
+      - app-network
     volumes:
-      - ./workers/video_enhancement:/app
-      - ./server/storage:/app/storage
+      - storage:/app/storage
     depends_on:
-      - server
-      - rabbitmq
+      rabbitmq:
+        condition: service_healthy
     environment:
+      - RABBITMQ_URL=amqp://rabbitmq:5672
       - RABBITMQ_HOST=rabbitmq
-      - SERVER_URL=http://server:8000
+      - RABBITMQ_USER=guest
+      - RABBITMQ_PASS=guest
 
-  # Metadata Extraction Worker
   metadata_extraction:
     build:
-      context: .
-      dockerfile: workers/metadata_extraction/Dockerfile
+      context: ./workers/metadata_extraction
+      dockerfile: Dockerfile
+    networks:
+      - app-network
     volumes:
-      - ./workers/metadata_extraction:/app
-      - ./server/storage:/app/storage
+      - storage:/app/storage
     depends_on:
-      - server
-      - rabbitmq
+      rabbitmq:
+        condition: service_healthy
     environment:
+      - RABBITMQ_URL=amqp://rabbitmq:5672
       - RABBITMQ_HOST=rabbitmq
-      - SERVER_URL=http://server:8000
+      - RABBITMQ_USER=guest
+      - RABBITMQ_PASS=guest
 
-  # React Client
   client:
     build:
       context: ./client
       dockerfile: Dockerfile
     ports:
       - "3000:3000"
-    volumes:
-      - ./client:/app
-      - /app/node_modules
-    depends_on:
-      - server
+    networks:
+      - app-network
     environment:
       - REACT_APP_API_URL=http://localhost:8000
+      - REACT_APP_WS_URL=ws://localhost:8000
+
+networks:
+  app-network:
+    driver: bridge
 
 volumes:
   rabbitmq_data:
+  storage:

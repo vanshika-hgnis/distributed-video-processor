@@ -8,10 +8,10 @@ RUN apt-get update && apt-get install -y \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY workers/video_enhancement/requirements.txt .
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY workers/video_enhancement/ .
+COPY . .
 
 # Create storage directory
 RUN mkdir -p storage

@@ -3,7 +3,7 @@ import './App.css';
 
 
 const API_URL = process.env.REACT_APP_API_URL;
-const WS_URL = process.env.REACT_APP_WS_URL;
+const WS_URL = process.env.REACT_APP_WS_URL || "ws://localhost:8000";
 
 
 function App() {
@@ -21,57 +21,48 @@ function App() {
 
   // Connect to WebSocket when the component mounts
   useEffect(() => {
-    // Create WebSocket connection
-    // const ws = new WebSocket('ws://localhost:8000/ws');
-    const ws = new WebSocket(`${WS_URL}/ws`);
+    // Only create a new WebSocket if one doesn’t exist
+    if (!websocketRef.current) {
+      console.log('WS_URL:', WS_URL);
+      const ws = new WebSocket(`${WS_URL}/ws`);
+      websocketRef.current = ws;
 
+      ws.onopen = () => {
+        console.log('WebSocket Connected');
+        setConnected(true);
+        setStatusMessage('Connected to server');
+      };
 
-    ws.onopen = () => {
-      console.log('WebSocket Connected');
-      setConnected(true);
-      setStatusMessage('Connected to server');
-    };
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        console.log('Received message:', data);
+        if (data.type === 'connection') {
+          setClientId(data.client_id);
+          setStatusMessage('Ready to upload video');
+        }
+      };
 
-    ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      console.log('Received message:', data);
+      ws.onerror = (error) => {
+        console.error('WebSocket Error:', error);
+        setStatusMessage('Connection error');
+        setConnected(false);
+      };
 
-      if (data.type === 'connection') {
-        setClientId(data.client_id);
-        setStatusMessage('Ready to upload video');
-      } else if (data.type === 'upload_success') {
-        setStatusMessage(`Upload successful. Processing file ${data.file_id}...`);
-        setProcessing(true);
-      } else if (data.type === 'processing_complete') {
-        setStatusMessage('Processing complete!');
-        setMetadata(data.metadata);
-        setEnhancedVideoPath(data.enhanced_video_path);
-        setProcessing(false);
-      }
-    };
+      ws.onclose = () => {
+        console.log('WebSocket Disconnected');
+        setStatusMessage('Disconnected from server');
+        setConnected(false);
+      };
+    }
 
-    ws.onerror = (error) => {
-      console.error('WebSocket Error:', error);
-      setError('Error connecting to server');
-      setStatusMessage('Connection error');
-      setConnected(false);
-    };
-
-    ws.onclose = () => {
-      console.log('WebSocket Disconnected');
-      setStatusMessage('Disconnected from server');
-      setConnected(false);
-    };
-
-    websocketRef.current = ws;
-
-    // Clean up WebSocket connection when component unmounts
+    // Cleanup function: Close the WebSocket only when the component unmounts
     return () => {
       if (websocketRef.current) {
         websocketRef.current.close();
+        websocketRef.current = null;
       }
     };
-  }, []);
+  }, []); // Empty dependency array ensures this runs only on mount
 
   // Handle file selection
   const handleFileChange = (event) => {
